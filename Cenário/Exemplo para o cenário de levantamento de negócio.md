@@ -347,9 +347,8 @@ Quarta etapa porque:
 
 ### Perguntas reveladoras para os Alunos
 
-Estas perguntas naturalmente levarão os alunos a identificar os pontos de conflito e sobreposição que justificam uma arquitetura Data Mesh:
+Estes exemplos de perguntas naturalmente levarão a identificar os pontos de conflito e sobreposição que justificam uma arquitetura Data Mesh:
 
-Fazer link com o item de sempre existir treta em [[axiomas]]
 1. **Sobre Ownership:**
     - "Quando um cliente muda de endereço, quantas áreas precisam ser notificadas?"
     - "Quem decide se um sinistro deve ser pago - sinistros ou financeiro?"
