@@ -45,6 +45,7 @@ Durante o mapeamento, destacar situações que indicam necessidade de domínios 
 - "Existem regras de negócio conflitantes para o mesmo dado?"
 - "A frequência de atualização é muito diferente?"
 - "Quem é o 'dono' dessa informação na organização?"
+- 
 ## Sobreposições entre domínios justificando data mesh
 
 Muitas vezes times diferentes competem pelo ownership do mesmo dado. Diversas necessidades diferentes de níveis de atuações diferentes fazem com que seja necessário o agrupamento destes times em um "grande time conceitual" (domínios).
@@ -186,9 +187,9 @@ COMMISSION_SPLIT (
 
 ## Exemplo de entidades do negócio
 
-## 1. Ponto de Partida: Entidades-Raiz (Core Entities)
+### 1. Ponto de Partida: Entidades-Raiz (Core Entities)
 
-### **[[Cliente]]** - A base de tudo
+#### **[[Roteiros/Discussões guiadas/mesh/tabelas/Clientes]]** - A base de tudo
 
 Começaria aqui porque:
 
@@ -203,7 +204,7 @@ Começaria aqui porque:
 - "Um prospect é um cliente? E um beneficiário?"
 - "Como identificamos unicamente um cliente?"
 
-### **[[Produto]]** - O que vendemos
+#### **[[Produtos]]** - O que vendemos
 
 Segunda prioridade porque:
 
@@ -218,9 +219,9 @@ Segunda prioridade porque:
 - "Existem produtos compostos? Pacotes?"
 - "Como os produtos são categorizados?"
 
-## 2. Entidades Transacionais (Process Entities)
+### 2. Entidades Transacionais (Process Entities)
 
-### **Cotação/Proposta** - O início da jornada
+#### **Cotação/Proposta** - O início da jornada
 
 Terceira etapa porque:
 
@@ -235,7 +236,7 @@ Terceira etapa porque:
 - "Por quanto tempo uma cotação é válida?"
 - "Quais dados são obrigatórios vs opcionais?"
 
-### **Apólice** - O contrato efetivo
+#### **Apólice** - O contrato efetivo
 
 Quarta etapa porque:
 
@@ -252,13 +253,13 @@ Quarta etapa porque:
 
 ## 3. Entidades Operacionais (Operational Entities)
 
-### **Sinistro** - A materialização do risco
+#### **Sinistro** - A materialização do risco
 
 - Depende da existência de uma apólice ativa
 - Gera o maior volume de interações
 - Conecta-se com pagamentos e terceiros
 
-### **Pagamento/Prêmio** - O fluxo financeiro
+#### **Pagamento/Prêmio** - O fluxo financeiro
 
 - Relaciona-se com apólices e sinistros
 - Tem regras complexas de parcelamento
@@ -266,13 +267,13 @@ Quarta etapa porque:
 
 ## 4. Entidades de Suporte (Supporting Entities)
 
-### **Risco/Bem Segurado** - O objeto da proteção
+#### **Risco/Bem Segurado** - O objeto da proteção
 
 - Pode ser um carro, casa, vida, etc.
 - Tem características específicas por tipo
 - Influencia pricing e aceitação
 
-### **Cobertura** - O que está protegido
+#### **Cobertura** - O que está protegido
 
 - Define limites e exclusões
 - Varia por produto e risco
@@ -280,7 +281,7 @@ Quarta etapa porque:
 
 
 
-## 5. Indicadores de separação de domínios
+### 5. Indicadores de separação de domínios
 
 **Domínio de Clientes:**
 
@@ -323,3 +324,44 @@ Quarta etapa porque:
 - Entidades: Pagamentos, Comissões, Cobrança
 - Atualização: Financeiro, Cobrança
 - Frequência: Alta
+
+
+# Perguntas e exercícios para exercitar o raciocínio
+
+### Estratégia de Descoberta 
+
+**Exercício 1 - Mapeamento Visual:** "Desenhem as principais entidades que vocês acreditam existir em uma seguradora e suas relações"
+
+**Exercício 2 - Validação por Cenários:**
+
+- "João quer fazer um seguro de carro" → Quais entidades são criadas/consultadas?
+- "Maria bateu o carro e precisa acionar o seguro" → Qual o fluxo de entidades?
+- "A empresa ABC quer segurar sua frota" → O que muda no modelo?
+
+**Exercício 3 - Identificação de Atributos:** Para cada entidade identificada, perguntar:
+
+- Quais são os identificadores únicos?
+- Quais dados são obrigatórios?
+- Quais se relacionam com outras entidades?
+- Quais mudam com frequência vs. são estáveis?
+
+### Perguntas reveladoras para os Alunos
+
+Estas perguntas naturalmente levarão os alunos a identificar os pontos de conflito e sobreposição que justificam uma arquitetura Data Mesh:
+
+Fazer link com o item de sempre existir treta em [[axiomas]]
+1. **Sobre Ownership:**
+    - "Quando um cliente muda de endereço, quantas áreas precisam ser notificadas?"
+    - "Quem decide se um sinistro deve ser pago - sinistros ou financeiro?"
+2. **Sobre Conflitos:**
+    - "O valor do prêmio calculado em vendas é sempre o mesmo aprovado em subscrição?"
+    - "Como resolvem quando o cliente informa dados diferentes para vendas e sinistros?" 
+3. **Sobre Temporalidade:**
+    - "Com que frequência mudam as regras de aceitação de um produto?"
+    - "Quanto tempo leva entre uma cotação e a emissão da apólice?"
+4. **Sobre Volume:**
+    - "Quantas cotações são feitas vs. quantas viram apólices?"
+    - "Qual a proporção de sinistros por apólice ativa?"
+5. **Sobre Integração:**
+    - "Como o sistema sabe que pode renovar uma apólice?"
+    - "Como identificam tentativas de fraude entre múltiplas apólices?"
