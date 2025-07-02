@@ -678,4 +678,250 @@ PARCEIROS:
 - Performance Metrics
 - Contract Management
 ```
+
+# Diagrama de Tabelas - Data Product Lifecycle Events
+
+## Mapeamento de Tabelas por Evento de Negócio
+
+### Tabelas Centrais (Core)
+
+```mermaid
+graph TB
+    subgraph "Domínio Apólices - Tabelas Core"
+        P[policy<br/>- Fonte principal dos eventos]
+        E[endorsement<br/>- Eventos de endosso]
+        IR[insured_risk<br/>- Riscos segurados]
+        PC[policy_coverage<br/>- Coberturas contratadas]
+        PB[policy_beneficiary<br/>- Beneficiários]
+    end
+    
+    subgraph "Domínio Vendas - Origem"
+        Q[quote<br/>- Cotações]
+        PR[proposal<br/>- Propostas aprovadas]
+        PD[proposal_document<br/>- Documentos]
+    end
+    
+    subgraph "Domínio Financeiro - Pagamentos"
+        B[billing<br/>- Faturamento]
+        PP[premium_payment<br/>- Pagamentos]
+        D[delinquency<br/>- Inadimplência]
+        C[commission<br/>- Comissões]
+    end
+    
+    subgraph "Domínio Subscrição"
+        RA[risk_analysis<br/>- Análise de risco]
+        UE[underwriting_exception<br/>- Exceções]
+    end
+    
+    subgraph "Domínio Clientes"
+        CM[customer_master<br/>- Dados do cliente]
+        CC[customer_contact<br/>- Contatos]
+    end
+    
+    subgraph "Domínio Sinistros"
+        CL[claim<br/>- Sinistros]
+    end
+    
+    PR -->|Gera| P
+    P -->|Tem| E
+    P -->|Possui| IR
+    P -->|Define| PC
+    P -->|Indica| PB
+    P -->|Gera| B
+    B -->|Recebe| PP
+    B -->|Pode gerar| D
+    P -->|Paga| C
+    P -->|Referencia| CM
+    P -->|Pode ter| CL
 ```
+
+### Tabelas por Tipo de Evento
+
+#### 1. **APÓLICE EMITIDA**
+
+```sql
+-- Tabelas principais
+- policy (INSERT)
+- insured_risk (INSERT) 
+- policy_coverage (INSERT)
+- policy_beneficiary (INSERT quando aplicável)
+
+-- Tabelas relacionadas para contexto
+- proposal (WHERE policy.proposal_id)
+- customer_master (WHERE policy.customer_id)
+- product_master (WHERE policy.product_id)
+```
+
+#### 2. **ENDOSSO PROCESSADO**
+
+```sql
+-- Tabelas principais
+- endorsement (INSERT/UPDATE)
+- policy (UPDATE - premium_adjustment)
+- policy_coverage (UPDATE quando altera coberturas)
+- insured_risk (UPDATE quando altera riscos)
+
+-- Tabelas relacionadas
+- billing (novo registro se altera prêmio)
+```
+
+#### 3. **PAGAMENTO/INADIMPLÊNCIA**
+
+```sql
+-- Tabelas principais
+- premium_payment (INSERT)
+- billing (UPDATE status)
+- delinquency (INSERT/UPDATE/DELETE)
+- policy (UPDATE status se suspensão)
+
+-- Tabelas relacionadas
+- customer_contact (para notificações)
+```
+
+#### 4. **RENOVAÇÃO**
+
+```sql
+-- Tabelas principais
+- policy (UPDATE renewal_date ou INSERT nova apólice)
+- quote (INSERT para nova cotação)
+- proposal (INSERT para nova proposta)
+
+-- Tabelas relacionadas
+- claim (histórico de sinistros)
+- premium_payment (histórico de pagamentos)
+```
+
+#### 5. **CANCELAMENTO**
+
+```sql
+-- Tabelas principais
+- policy (UPDATE status, cancellation_date, cancellation_reason)
+- billing (UPDATE para cancelar cobranças futuras)
+- commission (UPDATE/INSERT para estornos)
+
+-- Tabelas relacionadas
+- delinquency (se cancelamento por inadimplência)
+```
+
+### Estratégia de Captura de Eventos
+
+```yaml
+Change Data Capture (CDC) nas seguintes tabelas:
+
+Alta Prioridade (Tempo Real):
+  - policy: Todas as colunas
+  - endorsement: Todas as colunas
+  - premium_payment: Todas as colunas
+  - delinquency: Todas as colunas
+
+Média Prioridade (Near Real-Time):
+  - billing: status, payment_date
+  - policy_coverage: Mudanças
+  - insured_risk: Mudanças
+
+Baixa Prioridade (Batch):
+  - commission: Para relatórios
+  - customer_master: Atualizações
+  - claim: Para contexto
+```
+
+### Matriz de Eventos vs Tabelas
+
+|Evento|policy|endorsement|billing|premium_payment|delinquency|policy_coverage|insured_risk|
+|---|---|---|---|---|---|---|---|
+|Emissão|INSERT|-|INSERT|-|-|INSERT|INSERT|
+|Ativação|UPDATE|-|-|-|-|-|-|
+|Endosso|UPDATE|INSERT|INSERT*|-|-|UPDATE*|UPDATE*|
+|Pagamento|-|-|UPDATE|INSERT|DELETE*|-|-|
+|Atraso|-|-|UPDATE|-|INSERT|-|-|
+|Suspensão|UPDATE|-|UPDATE|-|UPDATE|-|-|
+|Reativação|UPDATE|-|UPDATE|INSERT|DELETE|-|-|
+|Renovação|UPDATE|-|INSERT|-|-|-|-|
+|Cancelamento|UPDATE|-|UPDATE|-|UPDATE*|-|-|
+|Expiração|UPDATE|-|-|-|-|-|-|
+
+*Quando aplicável
+
+### Query Pattern para Detecção de Eventos
+
+```sql
+-- Exemplo: Detectar apólices próximas do vencimento
+SELECT 
+    p.policy_id,
+    p.policy_number,
+    p.customer_id,
+    p.expiration_date,
+    p.renewal_date,
+    DATEDIFF(day, GETDATE(), p.expiration_date) as days_to_expire,
+    cm.full_name as customer_name,
+    cc.contact_value as contact_email,
+    -- Histórico relevante
+    (SELECT COUNT(*) FROM claim WHERE policy_id = p.policy_id) as claim_count,
+    (SELECT COUNT(*) FROM delinquency WHERE policy_id = p.policy_id) as delinquency_count
+FROM policy p
+    JOIN customer_master cm ON p.customer_id = cm.customer_id
+    LEFT JOIN customer_contact cc ON cm.customer_id = cc.customer_id 
+        AND cc.contact_type = 'EMAIL' AND cc.is_primary = true
+WHERE 
+    p.status = 'ACTIVE'
+    AND p.expiration_date BETWEEN GETDATE() AND DATEADD(day, 90, GETDATE())
+    AND p.renewal_date IS NULL
+```
+
+### Tabelas de Contexto Adicional
+
+Para enriquecer os eventos com informações relevantes:
+
+```yaml
+Domínio Produtos:
+  - product_master: Nome e tipo do produto
+  - coverage_master: Descrição das coberturas
+
+Domínio Parceiros:
+  - partner_master: Dados do corretor
+  - broker: Informações específicas
+
+Domínio Clientes:
+  - customer_address: Localização
+  - customer_consent: Preferências LGPD
+
+Domínio Sinistros:
+  - claim: Histórico para score
+  - claim_payment: Valores pagos
+```
+
+### Triggers de Negócio por Tabela
+
+```sql
+-- policy
+CREATE TRIGGER trg_policy_lifecycle_events
+ON policy
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    -- Detectar tipo de evento
+    IF EXISTS (SELECT 1 FROM inserted i WHERE i.policy_id NOT IN (SELECT policy_id FROM deleted))
+        -- INSERT: Nova apólice
+    ELSE IF EXISTS (SELECT 1 FROM inserted i JOIN deleted d ON i.policy_id = d.policy_id 
+                    WHERE d.status != i.status)
+        -- UPDATE status: Mudança de estado
+    ELSE IF EXISTS (SELECT 1 FROM inserted i JOIN deleted d ON i.policy_id = d.policy_id 
+                    WHERE d.cancellation_date IS NULL AND i.cancellation_date IS NOT NULL)
+        -- Cancelamento
+END
+
+-- Padrão similar para outras tabelas...
+```
+
+### Volume Estimado por Tabela
+
+| Tabela          | Registros | Eventos/Mês | Criticidade |
+| --------------- | --------- | ----------- | ----------- |
+| policy          | 2M        | 30K         | ALTA        |
+| endorsement     | 500K      | 25K         | ALTA        |
+| billing         | 2.5M      | 200K        | ALTA        |
+| premium_payment | 10M       | 180K        | ALTA        |
+| delinquency     | 100K      | 50K         | ALTA        |
+| policy_coverage | 6M        | 40K         | MÉDIA       |
+| insured_risk    | 2.2M      | 30K         | MÉDIA       |
+| claim           | 300K      | 15K         | BAIXA       |
